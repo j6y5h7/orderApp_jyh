@@ -1,8 +1,16 @@
 import { formatPrice } from '../data/menuData'
 
-function Cart({ items, onQuantityChange, onRemove, onSubmit }) {
+function Cart({ items, stock = {}, onQuantityChange, onRemove, onSubmit }) {
   const total = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)
   const isEmpty = items.length === 0
+
+  const getMaxQuantity = (item) => {
+    const available = stock[item.menuId] ?? 0
+    const othersQty = items
+      .filter((i) => i.menuId === item.menuId && i.cartItemId !== item.cartItemId)
+      .reduce((s, i) => s + i.quantity, 0)
+    return Math.max(0, available - othersQty)
+  }
 
   return (
     <section className="cart">
@@ -15,6 +23,8 @@ function Cart({ items, onQuantityChange, onRemove, onSubmit }) {
                 ? ` (${item.optionNames.join(', ')})`
                 : ''
             const lineTotal = item.unitPrice * item.quantity
+            const maxQty = getMaxQuantity(item)
+            const canIncrease = item.quantity < maxQty
             return (
               <li key={item.cartItemId} className="cart__item">
                 <div className="cart__item-info">
@@ -37,6 +47,7 @@ function Cart({ items, onQuantityChange, onRemove, onSubmit }) {
                   <button
                     type="button"
                     className="cart__qty-btn"
+                    disabled={!canIncrease}
                     onClick={() => onQuantityChange(item.cartItemId, 1)}
                     aria-label="수량 늘리기"
                   >
