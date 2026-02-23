@@ -34,6 +34,12 @@ PostgreSQL에 `order_app` 데이터베이스를 미리 생성해 두어야 합�
 CREATE DATABASE order_app;
 ```
 
+테이블·시드 데이터는 다음 명령으로 한 번 실행합니다.
+
+```bash
+npm run db:init
+```
+
 ## 실행
 
 - **개발** (파일 변경 시 자동 재시작, Node 18+ `--watch` 사용):

@@ -24,4 +24,8 @@ export async function checkConnection() {
   }
 }
 
+export function getClient() {
+  return pool.connect()
+}
+
 export default pool

@@ -1,22 +1,24 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import Header from './components/Header'
 import MenuCard from './components/MenuCard'
 import Cart from './components/Cart'
 import Admin from './components/Admin'
-import { MENU_LIST } from './data/menuData'
+import { api } from './api/client'
 import './App.css'
 
 let nextCartItemId = 1
-let nextOrderId = 1
-
-const initialStock = Object.fromEntries(MENU_LIST.map((m) => [m.id, 10]))
 
 function App() {
   const [currentTab, setCurrentTab] = useState('order')
   const [cart, setCart] = useState([])
   const [toast, setToast] = useState(null)
+  const [menuList, setMenuList] = useState([])
+  const [menusLoading, setMenusLoading] = useState(true)
+  const [menusError, setMenusError] = useState(null)
   const [orders, setOrders] = useState([])
-  const [stock, setStock] = useState(initialStock)
+  const [ordersLoading, setOrdersLoading] = useState(false)
+
+  const stock = Object.fromEntries(menuList.map((m) => [m.id, m.stock ?? 0]))
 
   const toastTimerRef = useRef(null)
   const showToast = useCallback((message) => {
@@ -27,6 +29,40 @@ function App() {
       toastTimerRef.current = null
     }, 2000)
   }, [])
+
+  const fetchMenus = useCallback(async () => {
+    setMenusLoading(true)
+    setMenusError(null)
+    try {
+      const data = await api.getMenus()
+      setMenuList(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setMenusError(err.message)
+      showToast('메뉴를 불러오지 못했습니다.')
+    } finally {
+      setMenusLoading(false)
+    }
+  }, [showToast])
+
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true)
+    try {
+      const data = await api.getOrders()
+      setOrders(Array.isArray(data) ? data : [])
+    } catch (err) {
+      showToast('주문 목록을 불러오지 못했습니다.')
+    } finally {
+      setOrdersLoading(false)
+    }
+  }, [showToast])
+
+  useEffect(() => {
+    fetchMenus()
+  }, [fetchMenus])
+
+  useEffect(() => {
+    if (currentTab === 'admin') fetchOrders()
+  }, [currentTab, fetchOrders])
 
   const addToCart = useCallback(
     (payload) => {
@@ -94,17 +130,15 @@ function App() {
     setCart((prev) => prev.filter((item) => item.cartItemId !== cartItemId))
   }, [])
 
-  const handleOrderSubmit = useCallback(() => {
+  const handleOrderSubmit = useCallback(async () => {
     if (cart.length === 0) return
 
-    // 품절 메뉴가 포함된 경우 주문 불가
     const hasSoldOutItem = cart.some((item) => (stock[item.menuId] ?? 0) === 0)
     if (hasSoldOutItem) {
       showToast('품절된 메뉴가 포함되어 있어 주문할 수 없습니다.')
       return
     }
 
-    // 메뉴별 장바구니 수량이 재고를 초과하는 경우 주문 불가 (다른 탭에서 재고가 줄었을 수 있음)
     const totalByMenu = {}
     cart.forEach((item) => {
       totalByMenu[item.menuId] = (totalByMenu[item.menuId] ?? 0) + item.quantity
@@ -118,9 +152,7 @@ function App() {
     }
 
     const total = cart.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
-    const order = {
-      id: nextOrderId++,
-      createdAt: new Date(),
+    const body = {
       items: cart.map((i) => ({
         menuId: i.menuId,
         menuName: i.menuName,
@@ -129,36 +161,42 @@ function App() {
         unitPrice: i.unitPrice,
       })),
       total,
-      status: 'accepted',
     }
 
-    // 주문 수량만큼 재고 차감
-    setStock((prev) => {
-      const next = { ...prev }
-      cart.forEach((item) => {
-        const current = next[item.menuId] ?? 0
-        next[item.menuId] = Math.max(0, current - item.quantity)
-      })
-      return next
-    })
+    try {
+      await api.createOrder(body)
+      setCart([])
+      await fetchMenus()
+      if (currentTab === 'admin') await fetchOrders()
+      showToast(`주문이 접수되었습니다. 총 금액 ${total.toLocaleString()}원`)
+    } catch (err) {
+      showToast(err.message || '주문 처리에 실패했습니다.')
+    }
+  }, [cart, showToast, stock, fetchMenus, fetchOrders, currentTab])
 
-    setOrders((prev) => [order, ...prev])
-    setCart([])
-    showToast(`주문이 접수되었습니다. 총 금액 ${total.toLocaleString()}원`)
-  }, [cart, showToast, stock])
+  const updateOrderStatus = useCallback(
+    async (orderId, newStatus) => {
+      try {
+        await api.patchOrderStatus(orderId, newStatus)
+        await fetchOrders()
+      } catch (err) {
+        showToast(err.message || '상태 변경에 실패했습니다.')
+      }
+    },
+    [fetchOrders, showToast]
+  )
 
-  const updateOrderStatus = useCallback((orderId, newStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    )
-  }, [])
-
-  const updateStock = useCallback((menuId, delta) => {
-    setStock((prev) => {
-      const next = (prev[menuId] ?? 0) + delta
-      return { ...prev, [menuId]: Math.max(0, next) }
-    })
-  }, [])
+  const updateStock = useCallback(
+    async (menuId, delta) => {
+      try {
+        await api.patchMenuStock(menuId, delta)
+        await fetchMenus()
+      } catch (err) {
+        showToast(err.message || '재고 수정에 실패했습니다.')
+      }
+    },
+    [fetchMenus, showToast]
+  )
 
   return (
     <div className="app">
@@ -168,19 +206,25 @@ function App() {
           <main className="order-page">
             <section className="menu-section">
               <h2 className="sr-only">메뉴</h2>
-              <div className="menu-grid">
-                {MENU_LIST.map((menu) => {
-                  const stockQty = stock[menu.id] ?? 0
-                  return (
-                    <MenuCard
-                      key={menu.id}
-                      menu={menu}
-                      stockQty={stockQty}
-                      onAddToCart={addToCart}
-                    />
-                  )
-                })}
-              </div>
+              {menusLoading ? (
+                <p className="menu-loading">메뉴를 불러오는 중...</p>
+              ) : menusError ? (
+                <p className="menu-error">{menusError}</p>
+              ) : (
+                <div className="menu-grid">
+                  {menuList.map((menu) => {
+                    const stockQty = stock[menu.id] ?? 0
+                    return (
+                      <MenuCard
+                        key={menu.id}
+                        menu={menu}
+                        stockQty={stockQty}
+                        onAddToCart={addToCart}
+                      />
+                    )
+                  })}
+                </div>
+              )}
             </section>
             <aside className="cart-section">
               <Cart
@@ -203,8 +247,9 @@ function App() {
         <div className="app__content">
           <Admin
             orders={orders}
+            ordersLoading={ordersLoading}
             stock={stock}
-            menuList={MENU_LIST}
+            menuList={menuList}
             onOrderStatusChange={updateOrderStatus}
             onStockChange={updateStock}
           />

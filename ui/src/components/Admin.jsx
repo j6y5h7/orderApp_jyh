@@ -1,6 +1,6 @@
 import { formatPrice } from '../data/menuData'
 
-function Admin({ orders, stock, menuList, onOrderStatusChange, onStockChange }) {
+function Admin({ orders, ordersLoading, stock, menuList, onOrderStatusChange, onStockChange }) {
   const acceptedCount = orders.filter((o) => o.status === 'accepted').length
   const inProgressCount = orders.filter((o) => o.status === 'in_progress').length
   const completedCount = orders.filter((o) => o.status === 'completed').length
@@ -75,7 +75,9 @@ function Admin({ orders, stock, menuList, onOrderStatusChange, onStockChange }) 
       <section className="admin-section admin-orders-section">
         <h2 className="admin-section__title">주문 현황</h2>
         <div className="admin-orders-list">
-          {orders.length === 0 ? (
+          {ordersLoading ? (
+            <p className="admin-orders-empty">주문 목록을 불러오는 중...</p>
+          ) : orders.length === 0 ? (
             <p className="admin-orders-empty">주문이 없습니다.</p>
           ) : (
             orders.map((order) => {
