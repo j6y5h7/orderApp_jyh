@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+
+# Environment (비밀번호 등 포함, 절대 커밋 금지)
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Optional (테스트/빌드 산출물)
+coverage
+.nyc_output
+dist
+.cache
