@@ -46,7 +46,7 @@ async function main() {
   } catch (err) {
     console.error('Error while initializing database:')
     console.error(err)
-    process.exit(1)
+    process.exit(1) 
   } finally {
     await pool.end()
   }
